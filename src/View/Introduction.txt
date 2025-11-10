@@ -1,1 +1,0 @@
-Adding views (the front structure of the program)
