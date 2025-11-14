@@ -1,18 +1,19 @@
 from fastapi import APIRouter, HTTPException, Request
-from Model import CadastrateModel, LoginModel
-from Helper.SignInHelper import SignInHelper
-
-router = APIRouter()
+from src.Model import CadastrateModel, LoginModel
+from src.Helper.SignInHelper import SignInHelper
 
 class LoginController:
+
+    router = APIRouter()
+
     @router.post("/cadastrate")
     async def cadastrate(request: CadastrateModel.CadastrateModel):
-        if request.IsReceiver:
-            if SignInHelper().Cadastrate(request):
+        if request.IsReceiver == "receptor":
+            if SignInHelper().Cadastrate(request) == "receptor":
                 return {"message": "Receiver login successful", "user": request.Name}
             else:
                 raise HTTPException(status_code=400, detail="Cadastration failed")
-        else:
+        elif request.IsReceiver == "doador" or request.IsReceiver == "admin":
             request.Cause = None
             request.Document = None
             request.Address = None
@@ -20,10 +21,12 @@ class LoginController:
                 return {"message": "Donor login successful", "user": request.Name}
             else: 
                 raise HTTPException(status_code=400, detail="Cadastration failed")
+        else:
+            raise HTTPException(status_code=400, detail="Cadastration failed")
     
-    @router.get("/login")
+    @router.post("/login")
     async def login(request: LoginModel.LoginModel):
         if SignInHelper().SignIn(request):
-            return {"message": "Login successful", "user": request.username}
+            return {"message": "Login successful", "user": request.Username}
         else:
             raise HTTPException(status_code=401, detail="Invalid credentials")

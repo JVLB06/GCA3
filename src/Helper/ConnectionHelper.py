@@ -1,12 +1,12 @@
 import psycopg2 as pg
 
 class ConnectionHelper:
-    def __init__(self, database, user, password, host, port):
-        self.Database = database
-        self.User = user
-        self.Password = password
-        self.Host = host
-        self.Port = port
+    def __init__(self):
+        self.Database = "helper"
+        self.User = "postgres"
+        self.Password = "2006"
+        self.Host = "localhost"
+        self.Port = 5432
 
     def Connection(self):
         try:
@@ -14,8 +14,8 @@ class ConnectionHelper:
                 database=self.Database,
                 user=self.User,
                 password=self.Password,
-                host=self.Port,
-                port=self.Host
+                host=self.Host,
+                port=self.Port
             )
             return connection
         except pg.Error as e:

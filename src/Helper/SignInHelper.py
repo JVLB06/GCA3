@@ -1,11 +1,8 @@
 import psycopg2 as pg
 from src.Helper.ConnectionHelper import ConnectionHelper
-from Model import CadastrateModel, LoginModel
+from src.Model import CadastrateModel, LoginModel
 
 class SignInHelper(ConnectionHelper):
-    def __init__(self):
-        pass
-
     def SignIn(self, params: LoginModel.LoginModel) -> bool:
         connection = self.Connection()
         if not connection:
@@ -13,8 +10,8 @@ class SignInHelper(ConnectionHelper):
 
         try:
             cursor = connection.cursor()
-            query = "SELECT COUNT(1) FROM users WHERE username = %s AND password = %s"
-            cursor.execute(query, (params.username, params.password))
+            query = "SELECT COUNT(1) FROM usuarios WHERE email = %s AND senha = %s"
+            cursor.execute(query, (params.Username, params.Password))
             result = cursor.fetchone()
             cursor.close()
             return result[0] == 1
@@ -32,8 +29,8 @@ class SignInHelper(ConnectionHelper):
         try:
             cursor = connection.cursor()
             query = """
-                INSERT INTO users (name, email, password, is_receiver, cause, document)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                INSERT INTO usuarios (nome, email, senha, tipo_usuario, descricao, documento, cep, ativo)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, true)
             """
             cursor.execute(query, (
                 params.Name,
@@ -41,7 +38,8 @@ class SignInHelper(ConnectionHelper):
                 params.Password,
                 params.IsReceiver,
                 params.Cause,
-                params.Document
+                params.Document,
+                params.Address
             ))
             connection.commit()
             cursor.close()

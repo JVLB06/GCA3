@@ -1,11 +1,11 @@
-class CadastrateModel:
-    def __init__(self, email: str, password: str, 
-                 isReceiver: bool, document: str, name: str, cause: str,
-                 Address: str):
-        self.Email = email
-        self.Name =  name
-        self.Password = password
-        self.IsReceiver = isReceiver
-        self.Document = document
-        self.Cause = cause
-        self.Address = Address
+from pydantic import BaseModel
+from typing import Optional
+
+class CadastrateModel(BaseModel):
+    Email: str
+    Password: str
+    IsReceiver: str
+    Document: Optional[str] = None
+    Name: str
+    Cause: Optional[str] = None
+    Address: Optional[str] = None

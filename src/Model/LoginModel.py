@@ -1,4 +1,5 @@
-class LoginModel:
-    def __init__(self, username: str, password: str):
-        self.username = username
-        self.password = password
+from pydantic import BaseModel
+
+class LoginModel(BaseModel):
+    Username: str
+    Password: str
