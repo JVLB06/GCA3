@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class TokenHelper:
-    SECRET_KEY = os.getenv("SECRET_KEY", "default_secret_key")  # Carrega do .env; fallback para dev (mas use .env sempre!)
+    SECRET_KEY = os.getenv("SECRET_KEY", "default_secret_key")  # Carrega do .env;
     ALGORITHM = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES = 60  # Expiração em minutos (1 hora)
 
@@ -44,4 +44,5 @@ class TokenHelper:
         payload = TokenHelper.verify_token(token)
         if payload:
             return payload.get("sub")  # "sub" é o campo padrão para o usuário
+
         return None
