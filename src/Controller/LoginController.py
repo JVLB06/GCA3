@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Request
 from src.Model import CadastrateModel, LoginModel
 from src.Helper.SignInHelper import SignInHelper
+from src.Helper.TokenHelper import TokenHelper
 
 class LoginController:
 
@@ -27,6 +28,8 @@ class LoginController:
     @router.post("/login")
     async def login(request: LoginModel.LoginModel):
         if SignInHelper().SignIn(request):
-            return {"message": "Login successful", "user": request.Username}
+            # Gera token após login bem-sucedido
+            access_token = TokenHelper.create_access_token(data={"sub": request.Username})
+            return {"message": "Login successful", "user": request.Username, "access_token": access_token, "token_type": "bearer"}
         else:
             raise HTTPException(status_code=401, detail="Invalid credentials")
