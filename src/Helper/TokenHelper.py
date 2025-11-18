@@ -2,15 +2,11 @@ import jwt
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from dotenv import load_dotenv
-
-# Carrega variáveis de ambiente do arquivo .env
-load_dotenv()
 
 class TokenHelper:
     def __init__(self):
         # Inicializa as variáveis como atributos de instância
-        self.secret_key = os.getenv("SECRET_KEY", "default_secret_key")  # Carrega do .env;
+        self.secret_key = "my_secret_key"  # Chave secreta fixa para desenvolvimento (mudar para .env depois se possivel)
         self.algorithm = "HS256"
         self.access_token_expire_minutes = 60  # Expiração em minutos (1 hora)
 
