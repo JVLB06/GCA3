@@ -1,6 +1,8 @@
 from fastapi import FastAPI, HTTPException, Request
 import uvicorn
 from src.Controller.LoginController import LoginController
+from src.Controller.DonatorController import DonatorController
+from src.Controller.ReceiverController import ReceiverController
 from src.Helper.SecurityHelper import add_security_middleware
 
 app = FastAPI()
@@ -15,6 +17,8 @@ async def root():
 
 # Incluindo routers
 app.include_router(LoginController.router)
+app.include_router(DonatorController.router)
+app.include_router(ReceiverController.router)
 
 # Iniciar o servidor
 if __name__ == "__main__":

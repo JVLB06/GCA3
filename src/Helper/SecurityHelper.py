@@ -7,7 +7,7 @@ async def authenticate_request(request: Request, call_next):
     Rotas públicas não exigem token.
     """
     # Rotas públicas (não exigem token)
-    public_routes = ["/", "/login", "/cadastrate"]
+    public_routes = ["/", "/login", "/cadastrate", "/docs"]
     if request.url.path in public_routes:
         return await call_next(request)
     
