@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from datetime import datetime
 from src.Model.PixModel import PixModel
 from src.Model.PixDeleteModel import PixDeleteModel
@@ -16,6 +16,10 @@ class ReceiverController:
     @router.post("/add_pix_key")
     async def add_pix_key(request: PixModel,
         user: str = Depends(get_current_user_from_token)):
+        
+        if user != "recebedor":
+            raise HTTPException(status_code=403, detail="Unauthorized access: Only receivers can access this endpoint")
+        
         if not request.CreatedAt:
             request.CreatedAt = datetime.now().isoformat()
 
@@ -24,4 +28,8 @@ class ReceiverController:
     @router.delete("/delete_pix_key")
     async def delete_pix_key(request: PixDeleteModel,
         user: str = Depends(get_current_user_from_token)):
+
+        if user != "recebedor":
+            raise HTTPException(status_code=403, detail="Unauthorized access: Only receivers can access this endpoint")
+        
         return {"message": ph().delete_pix_key(request)}
