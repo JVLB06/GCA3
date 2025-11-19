@@ -11,15 +11,14 @@ class DonatorController:
     async def get_donator():
         return {"message": "Donator endpoint is working!"}
     
-    @router.post("list_receivers")
-    async def list_receivers(request: ListReceiversRequestModel,
-        user: str = Depends(get_current_user_from_token)):
-
+    @router.get("/list_receivers/{TypeOfOrder}")
+    async def list_receivers(TypeOfOrder: str, user: str = Depends(get_current_user_from_token)):
+        print(user)
         if user != "doador":
             raise HTTPException(status_code=403, detail="Unauthorized access: Only donators can access this endpoint")
         try:
             helper = ReceiversHelper()
-            receivers = helper.get_receivers(request)
+            receivers = helper.get_receivers(TypeOfOrder)
             return {"receivers": receivers}
         except Exception as e:
             raise HTTPException(status_code=404, detail=f"Error fetching receivers: {e}")

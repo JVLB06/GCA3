@@ -29,7 +29,10 @@ class LoginController:
     async def login(request: LoginModel.LoginModel):
         if SignInHelper().SignIn(request):
             # Gera token após login bem-sucedido
-            access_token = TokenHelper().create_access_token(data={"sub": request.Username})
+            UserInfo = SignInHelper().GetKindOfUser(str(request.Username))
+            if not UserInfo:
+                raise HTTPException(status_code=404, detail="Error retrieving user type")
+            access_token = TokenHelper().create_access_token(data={"sub": UserInfo.KindOfUser})
             return {"message": "Login successful", "user": request.Username, "access_token": access_token, "token_type": "bearer"}
         else:
             raise HTTPException(status_code=401, detail="Invalid credentials")

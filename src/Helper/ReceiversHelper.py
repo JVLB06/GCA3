@@ -4,7 +4,7 @@ from src.Model.ListReceiversRequestModel import ListReceiversRequestModel
 import psycopg2 as pg
 
 class ReceiversHelper(ConnectionHelper):
-    def get_receivers(self, param: ListReceiversRequestModel) -> list[ListReceiversModel]:
+    def get_receivers(self, param: str) -> list[ListReceiversModel]:
         
         connection = self.Connection()
 
@@ -14,7 +14,7 @@ class ReceiversHelper(ConnectionHelper):
         FROM usuarios
         WHERE ativo = true AND tipo_usuario = 'receptor'"""
 
-        match param.TypeOfOrder:
+        match param:
             case "name_desc":
                 query = baseQuery + " ORDER BY nome DESC"
             case "created_at_desc":
