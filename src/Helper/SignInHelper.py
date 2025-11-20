@@ -32,17 +32,17 @@ class SignInHelper(ConnectionHelper):
         try:
             cursor = connection.cursor()
             query = """
-                INSERT INTO usuarios (nome, email, senha, tipo_usuario, descricao, documento, cep, ativo)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, true)
+                INSERT INTO usuarios (nome, email, senha, tipo_usuario, documento, cep, descricao, data_cadastro, ativo)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, true)
             """
             cursor.execute(query, (
                 params.Name,
                 params.Email,
                 params.Password,
                 params.IsReceiver,
-                params.Cause,
                 params.Document,
-                params.Address
+                params.Address,
+                params.Cause
             ))
             connection.commit()
             cursor.close()
@@ -63,6 +63,12 @@ class SignInHelper(ConnectionHelper):
         cursor.execute(query, (email,))
         result = cursor.fetchone()
         cursor.close()
+        self.CloseConnection(connection)
+        
+        # Tratamento se usuário não encontrado (evita TypeError)
+        if not result:
+            raise HTTPException(status_code=404, detail="User not found in database")
+        
         res = TokenModel.TokenModel()
         res.UserId = result[0]
         res.KindOfUser = result[1]
