@@ -10,7 +10,9 @@ class LoginController:
     @router.post("/cadastrate")
     async def cadastrate(request: CadastrateModel.CadastrateModel):
         if request.IsReceiver == "receptor":
-            if SignInHelper().Cadastrate(request):
+            if SignInHelper().ValidateAddress(request.Address) == False:
+                raise HTTPException(status_code=400, detail="Invalid Address")
+            elif SignInHelper().Cadastrate(request):
                 return {"message": "Receiver login successful", "user": request.Name}
             else:
                 raise HTTPException(status_code=400, detail="Cadastration failed")
