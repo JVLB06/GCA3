@@ -48,3 +48,20 @@ class ReceiversHelper(ConnectionHelper):
 
         return receivers
 
+    # Novo método auxiliar para validar se um cause_id é um receptor válido e ativo
+    def validate_cause_id(self, cause_id: int) -> bool:
+        connection = self.Connection()
+        if not connection:
+            return False
+        try:
+            cursor = connection.cursor()
+            cursor.execute(
+                "SELECT id_usuario FROM usuarios WHERE id_usuario = %s AND tipo_usuario = 'receptor' AND ativo = true",
+                (cause_id,)
+            )
+            return cursor.fetchone() is not None
+        except Exception:
+            return False
+        finally:
+            cursor.close()
+            connection.close()
