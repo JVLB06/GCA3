@@ -15,7 +15,7 @@ class PixHelper(ConnectionHelper):
         try:
             query = """SELECT COUNT(1) FROM pix_chaves WHERE 
             id_usuario = %s"""
-            cursor.execute(query, (str(pix.UserId)))
+            cursor.execute(query, (str(pix.UserId),))
             result = cursor.fetchone()
             return result[0] == 0 
         except pg.Error as e:

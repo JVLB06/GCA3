@@ -27,7 +27,6 @@ class DonatorController:
         except Exception as e:
             raise HTTPException(status_code=404, detail=f"Error fetching receivers: {e}")
 
-    # Novo endpoint para inativação de doador
     @router.post("/deactivate")
     async def deactivate_donator(request: DeactivateModel, user_email: str = Depends(get_current_user_from_token)):
         # Buscar dados do usuário logado via email (do token)
@@ -52,7 +51,6 @@ class DonatorController:
 
         try:
             cursor = connection.cursor()
-            # SELECT: Verificar se o ID existe e está ativo
             cursor.execute("SELECT ativo, tipo_usuario FROM usuarios WHERE id_usuario = %s", (request.id_usuario,))
             result = cursor.fetchone()
             if not result or not result[0]:  # Não encontrado ou já inativo
@@ -64,13 +62,14 @@ class DonatorController:
             cursor.execute("UPDATE usuarios SET ativo = false WHERE id_usuario = %s", (request.id_usuario,))
             connection.commit()
             return {"message": f"Donator with ID {request.id_usuario} deactivated successfully"}
+        except HTTPException:
+            raise
         except Exception as e:
             connection.rollback()
             raise HTTPException(status_code=500, detail=f"Error deactivating donator: {e}")
         finally:
             conn_helper.CloseConnection(connection)
 
-    # Novo endpoint para favoritar causa por ID (apenas doadores)
     @router.post("/favorite/{cause_id}")
     async def favorite_cause(cause_id: int, user_email: str = Depends(get_current_user_from_token)):
         # Buscar dados do usuário logado via email (do token)
@@ -108,6 +107,8 @@ class DonatorController:
             )
             connection.commit()
             return {"message": f"Cause with ID {cause_id} favorited successfully"}
+        except HTTPException:
+            raise
         except Exception as e:
             connection.rollback()
             raise HTTPException(status_code=500, detail=f"Error favoriting cause: {e}")

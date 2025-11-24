@@ -1,1 +1,0 @@
-Adding the main part, the heart of the application. This place makes the program work, read the info from the models and structure it for the Views
