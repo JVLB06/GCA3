@@ -1,11 +1,11 @@
 from fastapi import APIRouter, HTTPException, Request, Depends
-from src.Model.ListReceiversRequestModel import ListReceiversRequestModel
-from src.Model.DeactivateModel import DeactivateModel  
+from src.Model.DeactivateModel import DeactivateModel 
+from src.Model.AddFavoriteModel import AddFavoriteModel 
 from src.Helper.ReceiversHelper import ReceiversHelper
 from src.Helper.SecurityHelper import get_current_user_from_token
 from src.Helper.ConnectionHelper import ConnectionHelper 
-from src.Helper.SignInHelper import SignInHelper  
-from datetime import datetime 
+from src.Helper.SignInHelper import SignInHelper
+from src.Helper.FavoritesHelper import FavoriteHelper  
 
 class DonatorController:
     
@@ -17,7 +17,7 @@ class DonatorController:
     
     @router.get("/list_receivers/{TypeOfOrder}")
     async def list_receivers(TypeOfOrder: str, user: str = Depends(get_current_user_from_token)):
-        print(user)
+        
         if user != "doador":
             raise HTTPException(status_code=403, detail="Unauthorized access: Only donators can access this endpoint")
         try:
@@ -75,42 +75,32 @@ class DonatorController:
         # Buscar dados do usuário logado via email (do token)
         signin_helper = SignInHelper()
         user_data = signin_helper.GetKindOfUser(user_email)
-        user_id = user_data.UserId
-        user_type = user_data.KindOfUser
-
-        # Verificar se é doador
-        if user_type != 'doador':
+    
+        if user_data.KindOfUser != 'doador':
             raise HTTPException(status_code=403, detail="Unauthorized: Only donators can favorite causes")
 
-        # Validar se o cause_id é um receptor válido e ativo
         receivers_helper = ReceiversHelper()
         if not receivers_helper.validate_cause_id(cause_id):
             raise HTTPException(status_code=404, detail="Cause not found or not active")
 
-        # Conectar ao banco
-        conn_helper = ConnectionHelper()
-        connection = conn_helper.Connection()
-        if not connection:
-            raise HTTPException(status_code=500, detail="Database connection failed")
+        fav_info = AddFavoriteModel(CauseId=cause_id, UserId=user_data.UserId)
 
-        try:
-            cursor = connection.cursor()
-            # Verificar se já está favoritado (evitar duplicatas)
-            cursor.execute("SELECT id_favorito FROM favoritos WHERE id_usuario = %s AND id_causa = %s", (user_id, cause_id))
-            if cursor.fetchone():
-                raise HTTPException(status_code=409, detail="Cause already favorited")
+        return FavoriteHelper().add_favorite(fav_info)
 
-            # Inserir favorito
-            cursor.execute(
-                "INSERT INTO favoritos (id_usuario, id_causa, data_cadastro) VALUES (%s, %s, %s)",
-                (user_id, cause_id, datetime.now())
-            )
-            connection.commit()
-            return {"message": f"Cause with ID {cause_id} favorited successfully"}
-        except HTTPException:
-            raise
-        except Exception as e:
-            connection.rollback()
-            raise HTTPException(status_code=500, detail=f"Error favoriting cause: {e}")
-        finally:
-            conn_helper.CloseConnection(connection)
+    @router.delete("/favorite/{fav_id}")
+    async def remove_favorite(fav_id: int, user: str = Depends(get_current_user_from_token)):
+        if SignInHelper().GetKindOfUser(user) != "doador":
+            raise HTTPException(status_code=403, detail="Unauthorized: Only donators can remove favorites")
+        
+        return FavoriteHelper().remove_favorite(fav_id)
+    
+    @router.get("/favorites")
+    async def list_favorites(user_email: str = Depends(get_current_user_from_token)):
+        # Buscar dados do usuário logado via email (do token)
+        signin_helper = SignInHelper()
+        user_data = signin_helper.GetKindOfUser(user_email)
+    
+        if user_data.KindOfUser != 'doador':
+            raise HTTPException(status_code=403, detail="Unauthorized: Only donators can view favorites")
+
+        return FavoriteHelper().list_favorites(user_data.UserId)

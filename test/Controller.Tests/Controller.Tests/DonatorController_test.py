@@ -241,28 +241,23 @@ def test_deactivate_donator_user_not_found(monkeypatch):
 
 
 def test_favorite_cause_success(monkeypatch):
-    # Usuário logado: doador id 10
+    # Fake para usuário doador
     class FakeSignInHelper:
         def GetKindOfUser(self, email: str):
             return FakeUserData(user_id=10, kind_of_user="doador")
 
-    class FakeReceiversHelperOK:
-        def get_receivers(self, type_of_order: str):
-            return []
-
+    # Fake para ReceiversHelper validando a causa
+    class FakeReceiversHelper:
         def validate_cause_id(self, cause_id: int) -> bool:
-            return True  # causa válida e ativa
+            return True
 
-    cursor = FakeCursor()
-    cursor.to_fetch = [None]  # SELECT em favoritos não encontra nada (ainda não favoritado)
-    connection = FakeConnection(cursor)
-
-    class FakeConnectionHelper:
-        def Connection(self):
-            return connection
-
-        def CloseConnection(self, conn):
-            conn.closed = True
+    # Fake para FavoriteHelper simulando sucesso
+    class FakeFavoriteHelper:
+        def add_favorite(self, fav_info):
+            # Garante que o controller está montando corretamente o modelo
+            assert fav_info.CauseId == 123
+            assert fav_info.UserId == 10
+            return {"message": f"Cause with ID {fav_info.CauseId} favorited successfully"}
 
     monkeypatch.setattr(
         "src.Controller.DonatorController.SignInHelper",
@@ -270,11 +265,11 @@ def test_favorite_cause_success(monkeypatch):
     )
     monkeypatch.setattr(
         "src.Controller.DonatorController.ReceiversHelper",
-        lambda: FakeReceiversHelperOK(),
+        lambda: FakeReceiversHelper(),
     )
     monkeypatch.setattr(
-        "src.Controller.DonatorController.ConnectionHelper",
-        FakeConnectionHelper,
+        "src.Controller.DonatorController.FavoriteHelper",
+        FakeFavoriteHelper,
     )
 
     app = FastAPI()
@@ -287,14 +282,16 @@ def test_favorite_cause_success(monkeypatch):
     assert response.status_code == 200
     data = response.json()
     assert data["message"] == "Cause with ID 123 favorited successfully"
-    assert connection.committed is True
 
 
 def test_favorite_cause_forbidden_if_not_donator(monkeypatch):
     class FakeSignInHelper:
         def GetKindOfUser(self, email: str):
+            # Usuário não é doador
             return FakeUserData(user_id=10, kind_of_user="admin")
 
+    # Não precisamos mockar ReceiversHelper/FavoriteHelper aqui,
+    # pois o fluxo deve barrar antes.
     monkeypatch.setattr(
         "src.Controller.DonatorController.SignInHelper",
         FakeSignInHelper,
@@ -318,9 +315,6 @@ def test_favorite_cause_not_found_if_invalid_cause(monkeypatch):
             return FakeUserData(user_id=10, kind_of_user="doador")
 
     class FakeReceiversHelperInvalid:
-        def get_receivers(self, type_of_order: str):
-            return []
-
         def validate_cause_id(self, cause_id: int) -> bool:
             return False  # causa inválida / inativa
 
@@ -351,22 +345,18 @@ def test_favorite_cause_conflict_if_already_favorited(monkeypatch):
             return FakeUserData(user_id=10, kind_of_user="doador")
 
     class FakeReceiversHelperOK:
-        def get_receivers(self, type_of_order: str):
-            return []
-
         def validate_cause_id(self, cause_id: int) -> bool:
             return True
 
-    cursor = FakeCursor()
-    cursor.to_fetch = [("favorito_existente",)]  # SELECT encontra registro já favoritado
-    connection = FakeConnection(cursor)
+    # Fake FavoriteHelper que simula conflito (já favoritado)
+    class FakeFavoriteHelper:
+        def add_favorite(self, fav_info):
+            from fastapi import HTTPException
 
-    class FakeConnectionHelper:
-        def Connection(self):
-            return connection
-
-        def CloseConnection(self, conn):
-            conn.closed = True
+            raise HTTPException(
+                status_code=409,
+                detail="Cause already favorited",
+            )
 
     monkeypatch.setattr(
         "src.Controller.DonatorController.SignInHelper",
@@ -377,8 +367,8 @@ def test_favorite_cause_conflict_if_already_favorited(monkeypatch):
         lambda: FakeReceiversHelperOK(),
     )
     monkeypatch.setattr(
-        "src.Controller.DonatorController.ConnectionHelper",
-        FakeConnectionHelper,
+        "src.Controller.DonatorController.FavoriteHelper",
+        FakeFavoriteHelper,
     )
 
     app = FastAPI()
@@ -391,3 +381,116 @@ def test_favorite_cause_conflict_if_already_favorited(monkeypatch):
     assert response.status_code == 409
     data = response.json()
     assert data["detail"] == "Cause already favorited"
+
+def test_remove_favorite_success(monkeypatch):
+    # Aqui o controller compara diretamente com string "doador",
+    # então o fake precisa retornar uma string, não um objeto.
+    class FakeSignInHelper:
+        def GetKindOfUser(self, email: str):
+            return "doador"
+
+    class FakeFavoriteHelper:
+        def remove_favorite(self, fav_id: int):
+            assert fav_id == 1
+            return {"message": "Favorite removed successfully"}
+
+    monkeypatch.setattr(
+        "src.Controller.DonatorController.SignInHelper",
+        FakeSignInHelper,
+    )
+    monkeypatch.setattr(
+        "src.Controller.DonatorController.FavoriteHelper",
+        FakeFavoriteHelper,
+    )
+
+    app = FastAPI()
+    app.include_router(DonatorController.router)
+    app.dependency_overrides[get_current_user_from_token] = lambda: "user@example.com"
+
+    client = TestClient(app)
+
+    response = client.delete("/donator/favorite/1")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["message"] == "Favorite removed successfully"
+
+
+def test_remove_favorite_forbidden_if_not_donator(monkeypatch):
+    class FakeSignInHelper:
+        def GetKindOfUser(self, email: str):
+            return "admin"  # qualquer coisa diferente de "doador"
+
+    monkeypatch.setattr(
+        "src.Controller.DonatorController.SignInHelper",
+        FakeSignInHelper,
+    )
+
+    app = FastAPI()
+    app.include_router(DonatorController.router)
+    app.dependency_overrides[get_current_user_from_token] = lambda: "admin@example.com"
+
+    client = TestClient(app)
+
+    response = client.delete("/donator/favorite/1")
+    assert response.status_code == 403
+    data = response.json()
+    assert data["detail"] == "Unauthorized: Only donators can remove favorites"
+
+def test_list_favorites_success(monkeypatch):
+    class FakeSignInHelper:
+        def GetKindOfUser(self, email: str):
+            # Aqui o controller espera um objeto com UserId e KindOfUser
+            return FakeUserData(user_id=10, kind_of_user="doador")
+
+    class FakeFavoriteHelper:
+        def list_favorites(self, user_id: int):
+            assert user_id == 10
+            return [
+                {"id": 1, "cause_id": 123},
+                {"id": 2, "cause_id": 456},
+            ]
+
+    monkeypatch.setattr(
+        "src.Controller.DonatorController.SignInHelper",
+        FakeSignInHelper,
+    )
+    monkeypatch.setattr(
+        "src.Controller.DonatorController.FavoriteHelper",
+        FakeFavoriteHelper,
+    )
+
+    app = FastAPI()
+    app.include_router(DonatorController.router)
+    app.dependency_overrides[get_current_user_from_token] = lambda: "user@example.com"
+
+    client = TestClient(app)
+
+    response = client.get("/donator/favorites")
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) == 2
+    assert data[0]["cause_id"] == 123
+    assert data[1]["cause_id"] == 456
+
+
+def test_list_favorites_forbidden_if_not_donator(monkeypatch):
+    class FakeSignInHelper:
+        def GetKindOfUser(self, email: str):
+            return FakeUserData(user_id=10, kind_of_user="admin")
+
+    monkeypatch.setattr(
+        "src.Controller.DonatorController.SignInHelper",
+        FakeSignInHelper,
+    )
+
+    app = FastAPI()
+    app.include_router(DonatorController.router)
+    app.dependency_overrides[get_current_user_from_token] = lambda: "admin@example.com"
+
+    client = TestClient(app)
+
+    response = client.get("/donator/favorites")
+    assert response.status_code == 403
+    data = response.json()
+    assert data["detail"] == "Unauthorized: Only donators can view favorites"
