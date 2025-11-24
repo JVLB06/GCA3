@@ -1,1 +1,0 @@
-Adding structure for the models (the structure "models" for the program info)

@@ -74,6 +74,8 @@ class ReceiverController:
             cursor.execute("UPDATE usuarios SET ativo = false WHERE id_usuario = %s", (request.id_usuario,))
             connection.commit()
             return {"message": f"Receiver with ID {request.id_usuario} deactivated successfully"}
+        except HTTPException:
+            raise
         except Exception as e:
             connection.rollback()
             raise HTTPException(status_code=500, detail=f"Error deactivating receiver: {e}")

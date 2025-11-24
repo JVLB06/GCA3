@@ -13,7 +13,7 @@ class SignInHelper(ConnectionHelper):
 
         try:
             cursor = connection.cursor()
-            query = "SELECT COUNT(1) FROM usuarios WHERE email = %s AND senha = %s"
+            query = "SELECT COUNT(1) FROM usuarios WHERE email = %s AND senha = %s AND ativo = true"
             cursor.execute(query, (params.Username, params.Password))
             result = cursor.fetchone()
             cursor.close()
