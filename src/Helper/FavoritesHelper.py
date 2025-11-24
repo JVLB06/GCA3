@@ -13,7 +13,7 @@ class FavoriteHelper(ConnectionHelper):
 
         try:
             cursor = connection.cursor()
-            cursor.execute("SELECT id_favorito FROM favoritos WHERE id_usuario = %s AND id_causa = %s", (user_id, cause_id))
+            cursor.execute("SELECT id_favorito FROM favoritos WHERE id_usuario = %s AND id_causa = %s", (fav_info.UserId, fav_info.CauseId))
             if cursor.fetchone():
                 raise HTTPException(status_code=409, detail="Cause already favorited")
 
@@ -72,11 +72,11 @@ class FavoriteHelper(ConnectionHelper):
             rows = cursor.fetchall()
 
             for row in rows:
-                model = FavoriteModel()
-                model.CauseName=row[0]
-                model.CauseDescription=row[1]
-                model.CauseAddress=row[2]
-                model.CauseDocument=row[3]
+                model = FavoriteModel(
+                    CauseName=row[0],
+                    CauseDescription=row[1],
+                    CauseAddress=row[2],
+                    CauseDocument=row[3])
                 
                 favorites.append(model)
 
