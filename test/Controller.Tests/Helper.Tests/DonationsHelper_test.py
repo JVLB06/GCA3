@@ -224,7 +224,7 @@ def test_add_donations_success(monkeypatch):
     result = helper.add_donations(donation_info)
 
     # Método não retorna nada, apenas realiza o commit
-    assert result is None
+    assert result == {"message": "Donation efetuated successfully"}
     assert connection.committed is True
 
     # Verifica que o INSERT foi executado com os parâmetros corretos

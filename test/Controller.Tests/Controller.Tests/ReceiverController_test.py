@@ -15,6 +15,10 @@ class FakeUserData:
         self.KindOfUser = kind_of_user
 
 
+def make_fake_user(user_id: int, kind_of_user: str) -> FakeUserData:
+    return FakeUserData(user_id, kind_of_user)
+
+
 class FakeCursor:
     def __init__(self):
         self.to_fetch = []   # resultados que serão retornados por fetchone()
@@ -88,8 +92,10 @@ def test_add_pix_key_success(monkeypatch):
     app = FastAPI()
     app.include_router(ReceiverController.router)
 
-    # endpoint exige user == "recebedor"
-    app.dependency_overrides[get_current_user_from_token] = lambda: "recebedor"
+    # Usuário logado: receptor
+    app.dependency_overrides[get_current_user_from_token] = (
+        lambda: make_fake_user(10, "receptor")
+    )
 
     client = TestClient(app)
 
@@ -118,8 +124,11 @@ def test_add_pix_key_forbidden_if_not_receiver(monkeypatch):
 
     app = FastAPI()
     app.include_router(ReceiverController.router)
-    # usuário NÃO é recebedor
-    app.dependency_overrides[get_current_user_from_token] = lambda: "doador"
+
+    # usuário NÃO é receptor
+    app.dependency_overrides[get_current_user_from_token] = (
+        lambda: make_fake_user(10, "doador")
+    )
 
     client = TestClient(app)
 
@@ -151,7 +160,11 @@ def test_delete_pix_key_success(monkeypatch):
 
     app = FastAPI()
     app.include_router(ReceiverController.router)
-    app.dependency_overrides[get_current_user_from_token] = lambda: "recebedor"
+
+    # Usuário logado: receptor
+    app.dependency_overrides[get_current_user_from_token] = (
+        lambda: make_fake_user(10, "receptor")
+    )
 
     client = TestClient(app)
 
@@ -176,7 +189,11 @@ def test_delete_pix_key_forbidden_if_not_receiver(monkeypatch):
 
     app = FastAPI()
     app.include_router(ReceiverController.router)
-    app.dependency_overrides[get_current_user_from_token] = lambda: "doador"
+
+    # usuário NÃO é receptor
+    app.dependency_overrides[get_current_user_from_token] = (
+        lambda: make_fake_user(10, "doador")
+    )
 
     client = TestClient(app)
 
@@ -198,11 +215,6 @@ def test_delete_pix_key_forbidden_if_not_receiver(monkeypatch):
 
 
 def test_deactivate_receiver_success(monkeypatch):
-    # usuário logado: receptor id 10
-    class FakeSignInHelper:
-        def GetKindOfUser(self, email: str):
-            return FakeUserData(user_id=10, kind_of_user="receptor")
-
     cursor = FakeCursor()
     # SELECT retorna (ativo=True, tipo_usuario='receptor')
     cursor.to_fetch = [(True, "receptor")]
@@ -216,21 +228,21 @@ def test_deactivate_receiver_success(monkeypatch):
             conn.closed = True
 
     monkeypatch.setattr(
-        "src.Controller.ReceiverController.SignInHelper",
-        FakeSignInHelper,
-    )
-    monkeypatch.setattr(
         "src.Controller.ReceiverController.ConnectionHelper",
         FakeConnectionHelper,
     )
 
     app = FastAPI()
     app.include_router(ReceiverController.router)
-    app.dependency_overrides[get_current_user_from_token] = lambda: "receiver@example.com"
+
+    # usuário logado: receptor id 10
+    app.dependency_overrides[get_current_user_from_token] = (
+        lambda: make_fake_user(10, "receptor")
+    )
 
     client = TestClient(app)
 
-    # DeactivateModel: id_usuario (mesmo padrão que vc já usa pros outros)
+    # DeactivateModel: id_usuario
     payload = {"id_usuario": 10}
 
     response = client.post("/receiver/deactivate", json=payload)
@@ -241,18 +253,13 @@ def test_deactivate_receiver_success(monkeypatch):
 
 
 def test_deactivate_receiver_forbidden_if_not_receiver_or_admin(monkeypatch):
-    class FakeSignInHelper:
-        def GetKindOfUser(self, email: str):
-            return FakeUserData(user_id=10, kind_of_user="doador")  # tipo inválido
-
-    monkeypatch.setattr(
-        "src.Controller.ReceiverController.SignInHelper",
-        FakeSignInHelper,
-    )
-
     app = FastAPI()
     app.include_router(ReceiverController.router)
-    app.dependency_overrides[get_current_user_from_token] = lambda: "user@example.com"
+
+    # usuário logado: doador (tipo inválido)
+    app.dependency_overrides[get_current_user_from_token] = (
+        lambda: make_fake_user(10, "doador")
+    )
 
     client = TestClient(app)
 
@@ -268,22 +275,17 @@ def test_deactivate_receiver_forbidden_if_not_receiver_or_admin(monkeypatch):
 
 
 def test_deactivate_receiver_forbidden_if_trying_to_deactivate_other_user(monkeypatch):
-    # usuário logado: receptor id 10, tentando desativar 99
-    class FakeSignInHelper:
-        def GetKindOfUser(self, email: str):
-            return FakeUserData(user_id=10, kind_of_user="receptor")
-
-    monkeypatch.setattr(
-        "src.Controller.ReceiverController.SignInHelper",
-        FakeSignInHelper,
-    )
-
     app = FastAPI()
     app.include_router(ReceiverController.router)
-    app.dependency_overrides[get_current_user_from_token] = lambda: "user@example.com"
+
+    # usuário logado: receptor id 10
+    app.dependency_overrides[get_current_user_from_token] = (
+        lambda: make_fake_user(10, "receptor")
+    )
 
     client = TestClient(app)
 
+    # tenta desativar outro usuário (99)
     payload = {"id_usuario": 99}
 
     response = client.post("/receiver/deactivate", json=payload)
@@ -293,11 +295,6 @@ def test_deactivate_receiver_forbidden_if_trying_to_deactivate_other_user(monkey
 
 
 def test_deactivate_receiver_user_not_found_or_inactive(monkeypatch):
-    # admin logado, mas usuário não existe / já inativo
-    class FakeSignInHelper:
-        def GetKindOfUser(self, email: str):
-            return FakeUserData(user_id=1, kind_of_user="admin")
-
     cursor = FakeCursor()
     cursor.to_fetch = [None]  # SELECT não encontrou usuário
     connection = FakeConnection(cursor)
@@ -310,28 +307,23 @@ def test_deactivate_receiver_user_not_found_or_inactive(monkeypatch):
             conn.closed = True
 
     monkeypatch.setattr(
-        "src.Controller.ReceiverController.SignInHelper",
-        FakeSignInHelper,
-    )
-    monkeypatch.setattr(
         "src.Controller.ReceiverController.ConnectionHelper",
         FakeConnectionHelper,
     )
 
     app = FastAPI()
     app.include_router(ReceiverController.router)
-    app.dependency_overrides[get_current_user_from_token] = lambda: "admin@example.com"
+
+    # admin logado
+    app.dependency_overrides[get_current_user_from_token] = (
+        lambda: make_fake_user(1, "admin")
+    )
 
     client = TestClient(app)
 
     payload = {"id_usuario": 99}
 
     response = client.post("/receiver/deactivate", json=payload)
-
-    # ⚠️ Se o seu controller ainda estiver com `except Exception` engolindo HTTPException,
-    # isso pode retornar 500. O ideal é ter:
-    #   except HTTPException: raise
-    #   except Exception as e: ...
     assert response.status_code == 404
     data = response.json()
     assert data["detail"] == "User not found or already inactive"

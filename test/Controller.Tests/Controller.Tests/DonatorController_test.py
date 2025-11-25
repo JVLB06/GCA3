@@ -4,10 +4,15 @@ from fastapi.testclient import TestClient
 from src.Controller.DonatorController import DonatorController
 from src.Helper.SecurityHelper import get_current_user_from_token
 
+
 class FakeUserData:
     def __init__(self, user_id: int, kind_of_user: str):
         self.UserId = user_id
         self.KindOfUser = kind_of_user
+
+
+def make_fake_user(user_id: int, kind_of_user: str) -> FakeUserData:
+    return FakeUserData(user_id, kind_of_user)
 
 
 class FakeCursor:
@@ -40,6 +45,7 @@ class FakeConnection:
     def rollback(self):
         self.rolled_back = True
 
+
 def test_get_donator_root():
     app = FastAPI()
     app.include_router(DonatorController.router)
@@ -48,6 +54,7 @@ def test_get_donator_root():
     response = client.get("/donator/")
     assert response.status_code == 200
     assert response.json() == {"message": "Donator endpoint is working!"}
+
 
 class FakeReceiversHelper:
     def get_receivers(self, type_of_order: str):
@@ -68,7 +75,9 @@ def test_list_receivers_success(monkeypatch):
     app.include_router(DonatorController.router)
 
     # Usuário logado será um "doador"
-    app.dependency_overrides[get_current_user_from_token] = lambda: "doador"
+    app.dependency_overrides[get_current_user_from_token] = (
+        lambda: make_fake_user(10, "doador")
+    )
 
     client = TestClient(app)
 
@@ -86,7 +95,9 @@ def test_list_receivers_forbidden_if_not_donator(monkeypatch):
     app.include_router(DonatorController.router)
 
     # Usuário logado NÃO é doador
-    app.dependency_overrides[get_current_user_from_token] = lambda: "admin"
+    app.dependency_overrides[get_current_user_from_token] = (
+        lambda: make_fake_user(1, "admin")
+    )
 
     client = TestClient(app)
 
@@ -100,11 +111,6 @@ def test_list_receivers_forbidden_if_not_donator(monkeypatch):
 
 
 def test_deactivate_donator_success(monkeypatch):
-    # Fake SignInHelper -> sempre retorna doador com id 10
-    class FakeSignInHelper:
-        def GetKindOfUser(self, email: str):
-            return FakeUserData(user_id=10, kind_of_user="doador")
-
     # Fake ConnectionHelper -> retorna uma conexão com cursor configurado
     cursor = FakeCursor()
     # fetchone() irá retornar (ativo=True, tipo_usuario='doador')
@@ -119,10 +125,6 @@ def test_deactivate_donator_success(monkeypatch):
             conn.closed = True
 
     monkeypatch.setattr(
-        "src.Controller.DonatorController.SignInHelper",
-        FakeSignInHelper,
-    )
-    monkeypatch.setattr(
         "src.Controller.DonatorController.ConnectionHelper",
         FakeConnectionHelper,
     )
@@ -130,8 +132,10 @@ def test_deactivate_donator_success(monkeypatch):
     app = FastAPI()
     app.include_router(DonatorController.router)
 
-    # Email do usuário logado (token) – o valor em si não importa para o fake
-    app.dependency_overrides[get_current_user_from_token] = lambda: "user@example.com"
+    # Usuário logado: doador id 10
+    app.dependency_overrides[get_current_user_from_token] = (
+        lambda: make_fake_user(10, "doador")
+    )
 
     client = TestClient(app)
 
@@ -145,18 +149,13 @@ def test_deactivate_donator_success(monkeypatch):
 
 
 def test_deactivate_donator_forbidden_if_not_donator_or_admin(monkeypatch):
-    class FakeSignInHelper:
-        def GetKindOfUser(self, email: str):
-            return FakeUserData(user_id=10, kind_of_user="receptor")  # tipo inválido
-
-    monkeypatch.setattr(
-        "src.Controller.DonatorController.SignInHelper",
-        FakeSignInHelper,
-    )
-
     app = FastAPI()
     app.include_router(DonatorController.router)
-    app.dependency_overrides[get_current_user_from_token] = lambda: "user@example.com"
+
+    # Usuário logado NÃO é doador nem admin (ex.: receptor)
+    app.dependency_overrides[get_current_user_from_token] = (
+        lambda: make_fake_user(10, "receptor")
+    )
 
     client = TestClient(app)
 
@@ -172,19 +171,13 @@ def test_deactivate_donator_forbidden_if_not_donator_or_admin(monkeypatch):
 
 
 def test_deactivate_donator_forbidden_if_trying_to_deactivate_other_user(monkeypatch):
-    # Usuário logado é doador, mas com outro id
-    class FakeSignInHelper:
-        def GetKindOfUser(self, email: str):
-            return FakeUserData(user_id=10, kind_of_user="doador")
-
-    monkeypatch.setattr(
-        "src.Controller.DonatorController.SignInHelper",
-        FakeSignInHelper,
-    )
-
     app = FastAPI()
     app.include_router(DonatorController.router)
-    app.dependency_overrides[get_current_user_from_token] = lambda: "user@example.com"
+
+    # Usuário logado é doador id 10
+    app.dependency_overrides[get_current_user_from_token] = (
+        lambda: make_fake_user(10, "doador")
+    )
 
     client = TestClient(app)
 
@@ -198,11 +191,7 @@ def test_deactivate_donator_forbidden_if_trying_to_deactivate_other_user(monkeyp
 
 
 def test_deactivate_donator_user_not_found(monkeypatch):
-    class FakeSignInHelper:
-        def GetKindOfUser(self, email: str):
-            return FakeUserData(user_id=10, kind_of_user="admin")
-
-    # Aqui o admin pode desativar qualquer um, mas o usuário não existe / já inativo
+    # Admin pode desativar qualquer um, mas o usuário não existe / já inativo
     cursor = FakeCursor()
     cursor.to_fetch = [None]  # SELECT não encontrou nada
     connection = FakeConnection(cursor)
@@ -215,17 +204,17 @@ def test_deactivate_donator_user_not_found(monkeypatch):
             conn.closed = True
 
     monkeypatch.setattr(
-        "src.Controller.DonatorController.SignInHelper",
-        FakeSignInHelper,
-    )
-    monkeypatch.setattr(
         "src.Controller.DonatorController.ConnectionHelper",
         FakeConnectionHelper,
     )
 
     app = FastAPI()
     app.include_router(DonatorController.router)
-    app.dependency_overrides[get_current_user_from_token] = lambda: "admin@example.com"
+
+    # Usuário logado: admin
+    app.dependency_overrides[get_current_user_from_token] = (
+        lambda: make_fake_user(1, "admin")
+    )
 
     client = TestClient(app)
 
@@ -241,11 +230,6 @@ def test_deactivate_donator_user_not_found(monkeypatch):
 
 
 def test_favorite_cause_success(monkeypatch):
-    # Fake para usuário doador
-    class FakeSignInHelper:
-        def GetKindOfUser(self, email: str):
-            return FakeUserData(user_id=10, kind_of_user="doador")
-
     # Fake para ReceiversHelper validando a causa
     class FakeReceiversHelper:
         def validate_cause_id(self, cause_id: int) -> bool:
@@ -257,12 +241,10 @@ def test_favorite_cause_success(monkeypatch):
             # Garante que o controller está montando corretamente o modelo
             assert fav_info.CauseId == 123
             assert fav_info.UserId == 10
-            return {"message": f"Cause with ID {fav_info.CauseId} favorited successfully"}
+            return {
+                "message": f"Cause with ID {fav_info.CauseId} favorited successfully"
+            }
 
-    monkeypatch.setattr(
-        "src.Controller.DonatorController.SignInHelper",
-        FakeSignInHelper,
-    )
     monkeypatch.setattr(
         "src.Controller.DonatorController.ReceiversHelper",
         lambda: FakeReceiversHelper(),
@@ -274,7 +256,11 @@ def test_favorite_cause_success(monkeypatch):
 
     app = FastAPI()
     app.include_router(DonatorController.router)
-    app.dependency_overrides[get_current_user_from_token] = lambda: "user@example.com"
+
+    # Usuário logado: doador
+    app.dependency_overrides[get_current_user_from_token] = (
+        lambda: make_fake_user(10, "doador")
+    )
 
     client = TestClient(app)
 
@@ -285,21 +271,15 @@ def test_favorite_cause_success(monkeypatch):
 
 
 def test_favorite_cause_forbidden_if_not_donator(monkeypatch):
-    class FakeSignInHelper:
-        def GetKindOfUser(self, email: str):
-            # Usuário não é doador
-            return FakeUserData(user_id=10, kind_of_user="admin")
-
     # Não precisamos mockar ReceiversHelper/FavoriteHelper aqui,
     # pois o fluxo deve barrar antes.
-    monkeypatch.setattr(
-        "src.Controller.DonatorController.SignInHelper",
-        FakeSignInHelper,
-    )
-
     app = FastAPI()
     app.include_router(DonatorController.router)
-    app.dependency_overrides[get_current_user_from_token] = lambda: "admin@example.com"
+
+    # Usuário logado: admin (não doador)
+    app.dependency_overrides[get_current_user_from_token] = (
+        lambda: make_fake_user(10, "admin")
+    )
 
     client = TestClient(app)
 
@@ -310,18 +290,10 @@ def test_favorite_cause_forbidden_if_not_donator(monkeypatch):
 
 
 def test_favorite_cause_not_found_if_invalid_cause(monkeypatch):
-    class FakeSignInHelper:
-        def GetKindOfUser(self, email: str):
-            return FakeUserData(user_id=10, kind_of_user="doador")
-
     class FakeReceiversHelperInvalid:
         def validate_cause_id(self, cause_id: int) -> bool:
             return False  # causa inválida / inativa
 
-    monkeypatch.setattr(
-        "src.Controller.DonatorController.SignInHelper",
-        FakeSignInHelper,
-    )
     monkeypatch.setattr(
         "src.Controller.DonatorController.ReceiversHelper",
         lambda: FakeReceiversHelperInvalid(),
@@ -329,7 +301,11 @@ def test_favorite_cause_not_found_if_invalid_cause(monkeypatch):
 
     app = FastAPI()
     app.include_router(DonatorController.router)
-    app.dependency_overrides[get_current_user_from_token] = lambda: "user@example.com"
+
+    # Usuário logado: doador
+    app.dependency_overrides[get_current_user_from_token] = (
+        lambda: make_fake_user(10, "doador")
+    )
 
     client = TestClient(app)
 
@@ -340,10 +316,6 @@ def test_favorite_cause_not_found_if_invalid_cause(monkeypatch):
 
 
 def test_favorite_cause_conflict_if_already_favorited(monkeypatch):
-    class FakeSignInHelper:
-        def GetKindOfUser(self, email: str):
-            return FakeUserData(user_id=10, kind_of_user="doador")
-
     class FakeReceiversHelperOK:
         def validate_cause_id(self, cause_id: int) -> bool:
             return True
@@ -359,10 +331,6 @@ def test_favorite_cause_conflict_if_already_favorited(monkeypatch):
             )
 
     monkeypatch.setattr(
-        "src.Controller.DonatorController.SignInHelper",
-        FakeSignInHelper,
-    )
-    monkeypatch.setattr(
         "src.Controller.DonatorController.ReceiversHelper",
         lambda: FakeReceiversHelperOK(),
     )
@@ -373,7 +341,11 @@ def test_favorite_cause_conflict_if_already_favorited(monkeypatch):
 
     app = FastAPI()
     app.include_router(DonatorController.router)
-    app.dependency_overrides[get_current_user_from_token] = lambda: "user@example.com"
+
+    # Usuário logado: doador
+    app.dependency_overrides[get_current_user_from_token] = (
+        lambda: make_fake_user(10, "doador")
+    )
 
     client = TestClient(app)
 
@@ -382,22 +354,13 @@ def test_favorite_cause_conflict_if_already_favorited(monkeypatch):
     data = response.json()
     assert data["detail"] == "Cause already favorited"
 
-def test_remove_favorite_success(monkeypatch):
-    # Aqui o controller compara diretamente com string "doador",
-    # então o fake precisa retornar uma string, não um objeto.
-    class FakeSignInHelper:
-        def GetKindOfUser(self, email: str):
-            return "doador"
 
+def test_remove_favorite_success(monkeypatch):
     class FakeFavoriteHelper:
         def remove_favorite(self, fav_id: int):
             assert fav_id == 1
             return {"message": "Favorite removed successfully"}
 
-    monkeypatch.setattr(
-        "src.Controller.DonatorController.SignInHelper",
-        FakeSignInHelper,
-    )
     monkeypatch.setattr(
         "src.Controller.DonatorController.FavoriteHelper",
         FakeFavoriteHelper,
@@ -405,7 +368,11 @@ def test_remove_favorite_success(monkeypatch):
 
     app = FastAPI()
     app.include_router(DonatorController.router)
-    app.dependency_overrides[get_current_user_from_token] = lambda: "user@example.com"
+
+    # Usuário logado: doador
+    app.dependency_overrides[get_current_user_from_token] = (
+        lambda: make_fake_user(10, "doador")
+    )
 
     client = TestClient(app)
 
@@ -416,18 +383,13 @@ def test_remove_favorite_success(monkeypatch):
 
 
 def test_remove_favorite_forbidden_if_not_donator(monkeypatch):
-    class FakeSignInHelper:
-        def GetKindOfUser(self, email: str):
-            return "admin"  # qualquer coisa diferente de "doador"
-
-    monkeypatch.setattr(
-        "src.Controller.DonatorController.SignInHelper",
-        FakeSignInHelper,
-    )
-
     app = FastAPI()
     app.include_router(DonatorController.router)
-    app.dependency_overrides[get_current_user_from_token] = lambda: "admin@example.com"
+
+    # Usuário logado: admin (não doador)
+    app.dependency_overrides[get_current_user_from_token] = (
+        lambda: make_fake_user(10, "admin")
+    )
 
     client = TestClient(app)
 
@@ -436,12 +398,8 @@ def test_remove_favorite_forbidden_if_not_donator(monkeypatch):
     data = response.json()
     assert data["detail"] == "Unauthorized: Only donators can remove favorites"
 
-def test_list_favorites_success(monkeypatch):
-    class FakeSignInHelper:
-        def GetKindOfUser(self, email: str):
-            # Aqui o controller espera um objeto com UserId e KindOfUser
-            return FakeUserData(user_id=10, kind_of_user="doador")
 
+def test_list_favorites_success(monkeypatch):
     class FakeFavoriteHelper:
         def list_favorites(self, user_id: int):
             assert user_id == 10
@@ -451,17 +409,17 @@ def test_list_favorites_success(monkeypatch):
             ]
 
     monkeypatch.setattr(
-        "src.Controller.DonatorController.SignInHelper",
-        FakeSignInHelper,
-    )
-    monkeypatch.setattr(
         "src.Controller.DonatorController.FavoriteHelper",
         FakeFavoriteHelper,
     )
 
     app = FastAPI()
     app.include_router(DonatorController.router)
-    app.dependency_overrides[get_current_user_from_token] = lambda: "user@example.com"
+
+    # Usuário logado: doador
+    app.dependency_overrides[get_current_user_from_token] = (
+        lambda: make_fake_user(10, "doador")
+    )
 
     client = TestClient(app)
 
@@ -475,18 +433,13 @@ def test_list_favorites_success(monkeypatch):
 
 
 def test_list_favorites_forbidden_if_not_donator(monkeypatch):
-    class FakeSignInHelper:
-        def GetKindOfUser(self, email: str):
-            return FakeUserData(user_id=10, kind_of_user="admin")
-
-    monkeypatch.setattr(
-        "src.Controller.DonatorController.SignInHelper",
-        FakeSignInHelper,
-    )
-
     app = FastAPI()
     app.include_router(DonatorController.router)
-    app.dependency_overrides[get_current_user_from_token] = lambda: "admin@example.com"
+
+    # Usuário logado: admin
+    app.dependency_overrides[get_current_user_from_token] = (
+        lambda: make_fake_user(10, "admin")
+    )
 
     client = TestClient(app)
 
@@ -495,26 +448,15 @@ def test_list_favorites_forbidden_if_not_donator(monkeypatch):
     data = response.json()
     assert data["detail"] == "Unauthorized: Only donators can view favorites"
 
-def test_add_donation_success(monkeypatch):
-    # Fake do usuário doador
-    class FakeSignInHelper:
-        def GetKindOfUser(self, email: str):
-            # FakeUserData deve ser o mesmo já usado em outros testes
-            return FakeUserData(user_id=10, kind_of_user="doador")
 
+def test_add_donation_success(monkeypatch):
     # Fake do DonationsHelper
     class FakeDonationsHelper:
         def add_donations(self, donation_info):
             # Garante que o controller setou o DonorId correto
             assert donation_info.DonorId == 10
-            # Se quiser, pode validar outros campos do modelo aqui também
             return {"message": "Donation added successfully"}
 
-    # Monkeypatch dos helpers usados na rota
-    monkeypatch.setattr(
-        "src.Controller.DonatorController.SignInHelper",
-        FakeSignInHelper,
-    )
     monkeypatch.setattr(
         "src.Controller.DonatorController.DonationsHelper",
         FakeDonationsHelper,
@@ -523,20 +465,19 @@ def test_add_donation_success(monkeypatch):
     app = FastAPI()
     app.include_router(DonatorController.router)
 
-    # Simula token já validado → devolve email do usuário
+    # Usuário logado: doador
     app.dependency_overrides[get_current_user_from_token] = (
-        lambda: "user@example.com"
+        lambda: make_fake_user(10, "doador")
     )
 
     client = TestClient(app)
 
-    # ⚠ Ajuste este payload para bater com o seu DonationModel
     payload = {
-        "DonorId" : 123,
-        "ReceiverId" : 124,
-        "Amount" : 50.0,
-        "Date" : "2025-01-01",
-        "Message" : "Feito o pix"
+        "DonorId": 123,      # será sobrescrito para 10 no controller
+        "ReceiverId": 124,
+        "Amount": 50.0,
+        "Date": "2025-01-01",
+        "Message": "Feito o pix",
     }
 
     response = client.post("/donator/add_donation", json=payload)
@@ -544,33 +485,24 @@ def test_add_donation_success(monkeypatch):
     data = response.json()
     assert data["message"] == "Donation added successfully"
 
+
 def test_add_donation_forbidden_if_not_donator(monkeypatch):
-    class FakeSignInHelper:
-        def GetKindOfUser(self, email: str):
-            # Não é doador
-            return FakeUserData(user_id=10, kind_of_user="admin")
-
-    # Não precisamos mockar DonationsHelper, o fluxo deve parar antes
-    monkeypatch.setattr(
-        "src.Controller.DonatorController.SignInHelper",
-        FakeSignInHelper,
-    )
-
     app = FastAPI()
     app.include_router(DonatorController.router)
+
+    # Usuário logado: admin (não doador)
     app.dependency_overrides[get_current_user_from_token] = (
-        lambda: "admin@example.com"
+        lambda: make_fake_user(10, "admin")
     )
 
     client = TestClient(app)
 
-    # Mesmo payload do teste de sucesso (ajuste para o seu DonationModel)
     payload = {
-        "DonorId" : 123,
-        "ReceiverId" : 124,
-        "Amount" : 50.0,
-        "Date" : "2025-01-01",
-        "Message" : "Feito o pix"
+        "DonorId": 123,
+        "ReceiverId": 124,
+        "Amount": 50.0,
+        "Date": "2025-01-01",
+        "Message": "Feito o pix",
     }
 
     response = client.post("/donator/add_donation", json=payload)

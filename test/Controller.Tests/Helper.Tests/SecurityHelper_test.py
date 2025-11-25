@@ -6,6 +6,7 @@ from src.Helper.SecurityHelper import (
     authenticate_request,
     get_current_user_from_token,
 )
+from src.Model import TokenModel
 
 
 # ===================== Fakes de TokenHelper =====================
@@ -162,16 +163,45 @@ async def test_get_current_user_from_token_valid(monkeypatch):
         FakeTokenHelperValid,
     )
 
+    # Mocka também o SignInHelper para não bater no banco
+    class FakeSignInHelper:
+        def GetKindOfUser(self, email: str):
+            u = TokenModel.TokenModel()
+            u.UserId = 123
+            u.KindOfUser = "doador"
+            return u
+
+    monkeypatch.setattr(
+        "src.Helper.SecurityHelper.SignInHelper",
+        FakeSignInHelper,
+    )
+
     creds = FakeCredentials("token-valido")
 
     user = await get_current_user_from_token(creds)
 
-    assert user == "user@example.com"
+    # Agora get_current_user_from_token retorna um TokenModel, não mais string
+    assert isinstance(user, TokenModel.TokenModel)
+    assert user.UserId == 123
+    assert user.KindOfUser == "doador"
 
 
 @pytest.mark.anyio
 async def test_get_current_user_from_token_invalid(monkeypatch):
     # TokenHelper.get_current_user sempre retorna None
+    class FakeSignInHelper:
+        def GetKindOfUser(self, email: str):
+            # Ignora o email e devolve um TokenModel válido (não será usado neste teste)
+            u = TokenModel.TokenModel()
+            u.UserId = 123
+            u.KindOfUser = "doador"
+            return u
+
+    monkeypatch.setattr(
+        "src.Helper.SecurityHelper.SignInHelper",
+        FakeSignInHelper,
+    )
+
     monkeypatch.setattr(
         "src.Helper.SecurityHelper.TokenHelper",
         FakeTokenHelperInvalid,
