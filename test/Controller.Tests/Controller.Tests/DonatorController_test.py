@@ -494,3 +494,86 @@ def test_list_favorites_forbidden_if_not_donator(monkeypatch):
     assert response.status_code == 403
     data = response.json()
     assert data["detail"] == "Unauthorized: Only donators can view favorites"
+
+def test_add_donation_success(monkeypatch):
+    # Fake do usuário doador
+    class FakeSignInHelper:
+        def GetKindOfUser(self, email: str):
+            # FakeUserData deve ser o mesmo já usado em outros testes
+            return FakeUserData(user_id=10, kind_of_user="doador")
+
+    # Fake do DonationsHelper
+    class FakeDonationsHelper:
+        def add_donations(self, donation_info):
+            # Garante que o controller setou o DonorId correto
+            assert donation_info.DonorId == 10
+            # Se quiser, pode validar outros campos do modelo aqui também
+            return {"message": "Donation added successfully"}
+
+    # Monkeypatch dos helpers usados na rota
+    monkeypatch.setattr(
+        "src.Controller.DonatorController.SignInHelper",
+        FakeSignInHelper,
+    )
+    monkeypatch.setattr(
+        "src.Controller.DonatorController.DonationsHelper",
+        FakeDonationsHelper,
+    )
+
+    app = FastAPI()
+    app.include_router(DonatorController.router)
+
+    # Simula token já validado → devolve email do usuário
+    app.dependency_overrides[get_current_user_from_token] = (
+        lambda: "user@example.com"
+    )
+
+    client = TestClient(app)
+
+    # ⚠ Ajuste este payload para bater com o seu DonationModel
+    payload = {
+        "DonorId" : 123,
+        "ReceiverId" : 124,
+        "Amount" : 50.0,
+        "Date" : "2025-01-01",
+        "Message" : "Feito o pix"
+    }
+
+    response = client.post("/donator/add_donation", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["message"] == "Donation added successfully"
+
+def test_add_donation_forbidden_if_not_donator(monkeypatch):
+    class FakeSignInHelper:
+        def GetKindOfUser(self, email: str):
+            # Não é doador
+            return FakeUserData(user_id=10, kind_of_user="admin")
+
+    # Não precisamos mockar DonationsHelper, o fluxo deve parar antes
+    monkeypatch.setattr(
+        "src.Controller.DonatorController.SignInHelper",
+        FakeSignInHelper,
+    )
+
+    app = FastAPI()
+    app.include_router(DonatorController.router)
+    app.dependency_overrides[get_current_user_from_token] = (
+        lambda: "admin@example.com"
+    )
+
+    client = TestClient(app)
+
+    # Mesmo payload do teste de sucesso (ajuste para o seu DonationModel)
+    payload = {
+        "DonorId" : 123,
+        "ReceiverId" : 124,
+        "Amount" : 50.0,
+        "Date" : "2025-01-01",
+        "Message" : "Feito o pix"
+    }
+
+    response = client.post("/donator/add_donation", json=payload)
+    assert response.status_code == 403
+    data = response.json()
+    assert data["detail"] == "Unauthorized: Only donators can add donations"
