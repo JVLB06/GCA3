@@ -5,6 +5,7 @@ from src.Helper.ReceiversHelper import ReceiversHelper
 from src.Helper.SecurityHelper import get_current_user_from_token
 from src.Helper.ConnectionHelper import ConnectionHelper 
 from src.Helper.SignInHelper import SignInHelper
+from src.Helper.ProductHelper import ProductHelper
 from src.Helper.FavoritesHelper import FavoriteHelper  
 
 class DonatorController:
@@ -104,3 +105,10 @@ class DonatorController:
             raise HTTPException(status_code=403, detail="Unauthorized: Only donators can view favorites")
 
         return FavoriteHelper().list_favorites(user_data.UserId)
+
+    @router.get("/get_cause_products/{causeId}")
+    async def get_cause_products(causeId: int, user: str = Depends(get_current_user_from_token)):
+        if user != "doador":
+            raise HTTPException(status_code=403, detail="Unauthorized: Only donators can view products by cause")      
+
+        return ProductHelper().list_products(causeId)

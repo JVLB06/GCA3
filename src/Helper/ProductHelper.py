@@ -1,15 +1,15 @@
 from src.Helper.ConnectionHelper import ConnectionHelper
+from src.Model.ProductModel import ProductModel
+from src.Model.DeleteProductModel import DeleteProductModel
+from src.Model.ListProductModel import ListProductModel
+from fastapi import HTTPException
 from datetime import datetime
 
-class ProductHelper:
-    def __init__(self):
-        self.conn = ConnectionHelper().get_connection()
-        self.cursor = self.conn.cursor()
-
-    def create_product(self, product):
-      
-        try:
-            
+class ProductHelper(ConnectionHelper):
+    def create_product(self, product: ProductModel):
+        
+        connection = self.Connection()
+        try:      
             query = """
                 INSERT INTO produtos (id_causa, nome, descricao, valor, data_cadastro)
                 VALUES (%s, %s, %s, %s, %s)
@@ -17,54 +17,87 @@ class ProductHelper:
             """
             
             createdAt = datetime.now()
+            cursor = connection.cursor()
             
-            
-            self.cursor.execute(query, (
-                product.causeId,      
-                product.name,         
-                product.description,  
-                product.value,        
+            cursor.execute(query, (
+                product.CauseId,      
+                product.Name,         
+                product.Description,  
+                product.Value,        
                 createdAt             
             ))
             
-            new_id = self.cursor.fetchone()[0]
-            self.conn.commit()
-            return new_id
+            new_id = cursor.fetchone()[0]
+            connection.commit()
+            return {"message" : "Created new product", "ProductId" : new_id}
 
+        except HTTPException:
+            raise
         except Exception as e:
-            self.conn.rollback()
-            print(f"Error creating product: {e}")
-            return None
+            connection.rollback()
+            raise HTTPException(status_code=500, detail=f"Error creating product: {e}")
+        finally:
+            cursor.close()
+            self.CloseConnection(connection)
 
-    def update_product(self, product):
+    def delete_product(self, productId: DeleteProductModel):
         
-        try:
-            
+        connection = self.Connection()
+        cursor = connection.cursor()
+        try:    
             query = """
-                UPDATE produtos 
-                SET nome = %s, descricao = %s, valor = %s
-                WHERE id_produto = %s AND id_causa = %s;
+                DELETE FROM produtos 
+                WHERE id_produto = %s;
             """
             
-            self.cursor.execute(query, (
-                product.name,        
-                product.description, 
-                product.value,       
-                product.productId,   
-                product.causeId      
-            ))
+            cursor.execute(query, (productId.ProductId,))
             
-            self.conn.commit()
+            connection.commit()
             
-            return self.cursor.rowcount > 0
+            return cursor.rowcount > 0
 
+        except HTTPException:
+            raise
         except Exception as e:
-            self.conn.rollback()
-            print(f"Error updating product: {e}")
-            return False
+            connection.rollback()
+            raise HTTPException(status_code=500, detail=f"Error deleting product: {e}")
+        finally:
+            cursor.close()
+            self.CloseConnection(connection)
+    
+    def list_products(self, UserId: int = None):
+        
+        connection = self.Connection()
+        cursor = connection.cursor()
 
-    def __del__(self):
-        if hasattr(self, 'cursor') and self.cursor:
-            self.cursor.close()
-        if hasattr(self, 'conn') and self.conn:
-            self.conn.close()
+        query = """SELECT id_produto, id_causa, nome, descricao, valor
+        FROM produtos"""
+
+        try:
+            if UserId:
+                query += " WHERE id_causa = %s"
+                cursor.execute(query, (UserId,))
+            else:
+                cursor.execute(query)
+
+            products: list[ListProductModel] = []
+            rows = cursor.fetchall()
+
+            for row in rows:
+                model = ListProductModel()
+                model.ProductId=row[0]
+                model.CauseId=row[1]
+                model.ProductName=row[2]
+                model.Description=row[3]
+                model.Value=row[4]
+                
+                products.append(model)
+            
+            return products
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error listing produtct: {e}")
+        finally:
+            cursor.close()
+            self.CloseConnection(connection)

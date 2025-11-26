@@ -2,7 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from datetime import datetime
 from src.Model.PixModel import PixModel
 from src.Model.PixDeleteModel import PixDeleteModel
-from src.Model.DeactivateModel import DeactivateModel  
+from src.Model.DeactivateModel import DeactivateModel
+from src.Model.DeleteProductModel import DeleteProductModel
+from src.Model.ListProductModel import ListProductModel 
 from src.Helper.PixHelper import PixHelper as ph
 from src.Helper.SecurityHelper import get_current_user_from_token
 from src.Helper.ConnectionHelper import ConnectionHelper  
@@ -99,16 +101,17 @@ class ReceiverController:
         else:
             raise HTTPException(status_code=500, detail="Failed to create product")
 
-    @router.put("/update_product")
-    async def update_product(request: ProductModel, user: str = Depends(get_current_user_from_token)):
+    @router.delete("/delete_product")
+    async def delete_product(request: DeleteProductModel, user: str = Depends(get_current_user_from_token)):
         # Validação: Apenas 'recebedor' pode alterar produtos
         if user != "recebedor":
-             raise HTTPException(status_code=403, detail="Unauthorized access: Only receivers can update products")
+             raise HTTPException(status_code=403, detail="Unauthorized access: Only receivers can delete products")
 
-        helper = ProductHelper()
-        success = helper.update_product(request)
+        return ProductHelper().delete_product(request)
+       
+    @router.get("/get_products")
+    async def get_products(user: str = Depends(get_current_user_from_token)):
+        if user != "recebedor":
+            raise HTTPException(status_code=403, detail="Unauthorized access: Only receivers can list products")
 
-        if success:
-            return {"message": "Product updated successfully"}
-        else:
-            raise HTTPException(status_code=404, detail="Product not found or unauthorized update")
+        return ProductHelper().list_products()
