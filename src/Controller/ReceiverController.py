@@ -95,10 +95,8 @@ class ReceiverController:
             raise HTTPException(status_code=500, detail=f"Error fetching donations: {e}")
 
     @router.post("/create_product")
-    async def create_product(request: ProductModel, user: str = Depends(get_current_user_from_token)):
-        # Validação: Apenas 'recebedor' pode criar produtos
-        # (Ajuste essa validação se o seu token retornar o email em vez do tipo, igual ao 'deactivate')
-        if user != "recebedor":
+    async def create_product(request: ProductModel, user: TokenModel = Depends(get_current_user_from_token)):
+        if user.KindOfUser != "receptor":
              raise HTTPException(status_code=403, detail="Unauthorized access: Only receivers can create products")
 
         helper = ProductHelper()
@@ -110,16 +108,15 @@ class ReceiverController:
             raise HTTPException(status_code=500, detail="Failed to create product")
 
     @router.delete("/delete_product")
-    async def delete_product(request: DeleteProductModel, user: str = Depends(get_current_user_from_token)):
-        # Validação: Apenas 'recebedor' pode alterar produtos
-        if user != "recebedor":
+    async def delete_product(request: DeleteProductModel, user: TokenModel = Depends(get_current_user_from_token)):
+        if user.KindOfUser != "receptor":
              raise HTTPException(status_code=403, detail="Unauthorized access: Only receivers can delete products")
 
         return ProductHelper().delete_product(request)
        
     @router.get("/get_products")
-    async def get_products(user: str = Depends(get_current_user_from_token)):
-        if user != "recebedor":
+    async def get_products(user: TokenModel = Depends(get_current_user_from_token)):
+        if user.KindOfUser != "receptor":
             raise HTTPException(status_code=403, detail="Unauthorized access: Only receivers can list products")
 
         return ProductHelper().list_products()

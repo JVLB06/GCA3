@@ -113,8 +113,8 @@ class DonatorController:
         return DonationsHelper().list_donations_by_user(user.UserId)
 
     @router.get("/get_cause_products/{causeId}")
-    async def get_cause_products(causeId: int, user: str = Depends(get_current_user_from_token)):
-        if user != "doador":
+    async def get_cause_products(causeId: int, user: TokenModel = Depends(get_current_user_from_token)):
+        if user.KindOfUser != "doador":
             raise HTTPException(status_code=403, detail="Unauthorized: Only donators can view products by cause")      
 
         return ProductHelper().list_products(causeId)
