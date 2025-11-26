@@ -5,6 +5,13 @@ from fastapi.testclient import TestClient
 from src.Controller.ReceiverController import ReceiverController
 from src.Helper.SecurityHelper import get_current_user_from_token
 
+from fastapi import FastAPI, Depends, HTTPException
+from fastapi.testclient import TestClient
+import pytest
+from typing import Callable, Any
+
+from src.Controller.ReceiverController import ReceiverController
+from src.Model.ProductModel import ProductModel
 
 # ===================== FAKES GENÉRICOS =====================
 
@@ -335,3 +342,262 @@ def test_deactivate_receiver_user_not_found_or_inactive(monkeypatch):
     assert response.status_code == 404
     data = response.json()
     assert data["detail"] == "User not found or already inactive"
+
+
+
+class MockUser:
+    """Simula o objeto retornado por SignInHelper.GetKindOfUser."""
+    def __init__(self, kind_of_user: str, user_id: int):
+        self.KindOfUser = kind_of_user
+        self.UserId = user_id
+
+
+
+@pytest.fixture(scope="module") 
+def app_client():
+    """Cria e retorna o TestClient para a aplicação FastAPI."""
+    app = FastAPI()
+    app.include_router(ReceiverController.router)
+    return TestClient(app)
+
+@pytest.fixture
+def product_data():
+    """Dados de produto válidos para a criação/atualização."""
+    return {
+        "name": "Bola de Futebol",
+        "description": "Bola para doação",
+        "value": 120.00
+    }
+
+def create_mock_get_kind_of_user(user_type: str, user_id: int) -> Callable[[Any], MockUser]:
+   
+    def mock_func(user_email: str) -> MockUser:
+        return MockUser(kind_of_user=user_type, user_id=user_id)
+    return mock_func
+
+# ===================== /receiver/create_product =====================
+
+
+def test_create_product_success(monkeypatch):
+    class FakeProductHelper:
+        def create_product(self, product):
+            # garante que o controller está passando os dados
+            assert product.CauseId == 10
+            assert product.Name == "Produto Teste"
+            assert product.Description == "Descrição qualquer"
+            assert product.Value == 99.9
+            # simulamos que o helper retorna o ID do produto
+            return 123
+
+    # Monkeypatch da classe ProductHelper dentro do ReceiverController
+    monkeypatch.setattr(
+        "src.Controller.ReceiverController.ProductHelper",
+        FakeProductHelper,
+    )
+
+    app = FastAPI()
+    app.include_router(ReceiverController.router)
+    # Usuário logado é recebedor
+    app.dependency_overrides[get_current_user_from_token] = lambda: "recebedor"
+
+    client = TestClient(app)
+
+    payload = {
+        "CauseId": 10,
+        "Name": "Produto Teste",
+        "Description": "Descrição qualquer",
+        "Value": 99.9,
+    }
+
+    response = client.post("/receiver/create_product", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["message"] == "Product created successfully"
+    assert data["productId"] == 123
+
+
+def test_create_product_forbidden_if_not_receiver(monkeypatch):
+    class FakeProductHelper:
+        def create_product(self, product):
+            pytest.fail("Não deveria chamar o helper se não for recebedor")
+
+    monkeypatch.setattr(
+        "src.Controller.ReceiverController.ProductHelper",
+        FakeProductHelper,
+    )
+
+    app = FastAPI()
+    app.include_router(ReceiverController.router)
+    # Usuário NÃO é recebedor
+    app.dependency_overrides[get_current_user_from_token] = lambda: "doador"
+
+    client = TestClient(app)
+
+    payload = {
+        "CauseId": 10,
+        "Name": "Produto Teste",
+        "Description": "Descrição qualquer",
+        "Value": 99.9,
+    }
+
+    response = client.post("/receiver/create_product", json=payload)
+    assert response.status_code == 403
+    data = response.json()
+    assert (
+        data["detail"]
+        == "Unauthorized access: Only receivers can create products"
+    )
+
+
+def test_create_product_internal_error_when_helper_returns_falsy(monkeypatch):
+    class FakeProductHelper:
+        def create_product(self, product):
+            # simula falha silenciosa no helper
+            return None
+
+    monkeypatch.setattr(
+        "src.Controller.ReceiverController.ProductHelper",
+        FakeProductHelper,
+    )
+
+    app = FastAPI()
+    app.include_router(ReceiverController.router)
+    app.dependency_overrides[get_current_user_from_token] = lambda: "recebedor"
+
+    client = TestClient(app)
+
+    payload = {
+        "CauseId": 10,
+        "Name": "Produto Teste",
+        "Description": "Descrição qualquer",
+        "Value": 99.9,
+    }
+
+    response = client.post("/receiver/create_product", json=payload)
+    assert response.status_code == 500
+    data = response.json()
+    assert data["detail"] == "Failed to create product"
+
+# ===================== /receiver/delete_product =====================
+
+
+def test_delete_product_success(monkeypatch):
+    class FakeProductHelper:
+        def delete_product(self, request):
+            # garante que o ProductId veio correto
+            assert request.ProductId == 99
+            return True  # simula exclusão bem-sucedida
+
+    monkeypatch.setattr(
+        "src.Controller.ReceiverController.ProductHelper",
+        FakeProductHelper,
+    )
+
+    app = FastAPI()
+    app.include_router(ReceiverController.router)
+    app.dependency_overrides[get_current_user_from_token] = lambda: "recebedor"
+
+    client = TestClient(app)
+
+    payload = {"ProductId": 99}
+
+    response = client.request("DELETE", "/receiver/delete_product", json=payload)
+    assert response.status_code == 200
+    # o endpoint retorna diretamente o bool do helper
+    assert response.json() is True
+
+
+def test_delete_product_forbidden_if_not_receiver(monkeypatch):
+    class FakeProductHelper:
+        def delete_product(self, request):
+            pytest.fail("Não deveria ser chamado se usuário não é recebedor")
+
+    monkeypatch.setattr(
+        "src.Controller.ReceiverController.ProductHelper",
+        FakeProductHelper,
+    )
+
+    app = FastAPI()
+    app.include_router(ReceiverController.router)
+    app.dependency_overrides[get_current_user_from_token] = lambda: "admin"
+
+    client = TestClient(app)
+
+    payload = {"ProductId": 99}
+
+    response = client.request("DELETE", "/receiver/delete_product", json=payload)
+    assert response.status_code == 403
+    data = response.json()
+    assert (
+        data["detail"]
+        == "Unauthorized access: Only receivers can delete products"
+    )
+
+# ===================== /receiver/get_products =====================
+
+
+def test_get_products_success(monkeypatch):
+    class FakeProductHelper:
+        def list_products(self, UserId: int | None = None):
+            # aqui não estamos filtrando por usuário no controller, então UserId deve ser None
+            assert UserId is None
+            return [
+                {
+                    "ProductId": 1,
+                    "CauseId": 10,
+                    "ProductName": "Produto A",
+                    "Description": "Desc A",
+                    "Value": 50.0,
+                },
+                {
+                    "ProductId": 2,
+                    "CauseId": 20,
+                    "ProductName": "Produto B",
+                    "Description": "Desc B",
+                    "Value": 100.0,
+                },
+            ]
+
+    monkeypatch.setattr(
+        "src.Controller.ReceiverController.ProductHelper",
+        FakeProductHelper,
+    )
+
+    app = FastAPI()
+    app.include_router(ReceiverController.router)
+    app.dependency_overrides[get_current_user_from_token] = lambda: "recebedor"
+
+    client = TestClient(app)
+
+    response = client.get("/receiver/get_products")
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) == 2
+    assert data[0]["ProductId"] == 1
+    assert data[1]["ProductId"] == 2
+
+
+def test_get_products_forbidden_if_not_receiver(monkeypatch):
+    class FakeProductHelper:
+        def list_products(self, UserId: int | None = None):
+            pytest.fail("Não deveria ser chamado se usuário não é recebedor")
+
+    monkeypatch.setattr(
+        "src.Controller.ReceiverController.ProductHelper",
+        FakeProductHelper,
+    )
+
+    app = FastAPI()
+    app.include_router(ReceiverController.router)
+    app.dependency_overrides[get_current_user_from_token] = lambda: "doador"
+
+    client = TestClient(app)
+
+    response = client.get("/receiver/get_products")
+    assert response.status_code == 403
+    data = response.json()
+    assert (
+        data["detail"]
+        == "Unauthorized access: Only receivers can list products"
+    )

@@ -494,3 +494,72 @@ def test_list_favorites_forbidden_if_not_donator(monkeypatch):
     assert response.status_code == 403
     data = response.json()
     assert data["detail"] == "Unauthorized: Only donators can view favorites"
+
+
+def test_get_cause_products_success(monkeypatch):
+    class FakeProductHelper:
+        def list_products(self, UserId: int = None):
+            # aqui o controller passa causeId como argumento para list_products
+            assert UserId == 10
+            return [
+                {
+                    "ProductId": 1,
+                    "CauseId": 10,
+                    "ProductName": "Cesta Básica",
+                    "Description": "Cesta com alimentos",
+                    "Value": 100.0,
+                },
+                {
+                    "ProductId": 2,
+                    "CauseId": 10,
+                    "ProductName": "Roupa",
+                    "Description": "Kit de roupas",
+                    "Value": 150.0,
+                },
+            ]
+
+    # Monkeypatch da ProductHelper usada no DonatorController
+    monkeypatch.setattr(
+        "src.Controller.DonatorController.ProductHelper",
+        FakeProductHelper,
+    )
+
+    app = FastAPI()
+    app.include_router(DonatorController.router)
+    # usuário logado é doador
+    app.dependency_overrides[get_current_user_from_token] = lambda: "doador"
+
+    client = TestClient(app)
+
+    response = client.get("/donator/get_cause_products/10")
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) == 2
+    assert data[0]["CauseId"] == 10
+    assert data[1]["CauseId"] == 10
+
+def test_get_cause_products_forbidden_if_not_donator(monkeypatch):
+    class FakeProductHelper:
+        def list_products(self, UserId: int = None):
+            pytest.fail("Não deveria chamar ProductHelper se usuário não é doador")
+
+    monkeypatch.setattr(
+        "src.Controller.DonatorController.ProductHelper",
+        FakeProductHelper,
+    )
+
+    app = FastAPI()
+    app.include_router(DonatorController.router)
+    # usuário NÃO é doador
+    app.dependency_overrides[get_current_user_from_token] = lambda: "receptor"
+
+    client = TestClient(app)
+
+    response = client.get("/donator/get_cause_products/10")
+    assert response.status_code == 403
+    data = response.json()
+    assert (
+        data["detail"]
+        == "Unauthorized: Only donators can view products by cause"
+    )
