@@ -29,6 +29,8 @@ class ReceiverController:
         if user.KindOfUser != "receptor":
             raise HTTPException(status_code=403, detail="Unauthorized access: Only receivers can access this endpoint")
         
+        request.UserId = user.UserId
+
         if not request.CreatedAt:
             request.CreatedAt = datetime.now().isoformat()
 
@@ -41,12 +43,13 @@ class ReceiverController:
         if user.KindOfUser != "receptor":
             raise HTTPException(status_code=403, detail="Unauthorized access: Only receivers can access this endpoint")
         
+        request.UserId = user.UserId
+
         return {"message": ph().delete_pix_key(request)}
 
     # Novo endpoint para inativação de receptor
     @router.post("/deactivate")
     async def deactivate_receiver(request: DeactivateModel, user: TokenModel = Depends(get_current_user_from_token)):
-        # Verificar se é receptor ou admin
         if user.KindOfUser not in ['receptor', 'admin']:  # Nota: assumindo 'receptor' como 'receptor' no enum
             raise HTTPException(status_code=403, detail="Unauthorized: Only receivers or admins can deactivate receivers")
 
@@ -96,6 +99,9 @@ class ReceiverController:
 
     @router.post("/create_product")
     async def create_product(request: ProductModel, user: TokenModel = Depends(get_current_user_from_token)):
+        
+        request.CauseId = user.UserId
+        
         if user.KindOfUser != "receptor":
              raise HTTPException(status_code=403, detail="Unauthorized access: Only receivers can create products")
 
